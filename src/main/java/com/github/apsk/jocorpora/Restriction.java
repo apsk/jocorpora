@@ -11,10 +11,12 @@ public class Restriction {
         Form
     }
 
+    public final Type type;
     public final SideType leftType, rightType;
     public final Grammeme left, right;
 
-    public Restriction(SideType leftType, Grammeme left, SideType rightType, Grammeme right) {
+    public Restriction(Type type, SideType leftType, Grammeme left, SideType rightType, Grammeme right) {
+        this.type = type;
         this.leftType = leftType;
         this.rightType = rightType;
         this.left = left;
