@@ -1,6 +1,6 @@
 package com.github.apsk.jocorpora;
 
-import com.github.apsk.hax.Parser;
+import com.github.apsk.hax.parser.Parser;
 import com.github.apsk.j8t.Tuple2;
 
 import javax.xml.stream.XMLStreamException;
@@ -18,42 +18,40 @@ public class Dictionary {
 
     public static Dictionary fromStream(InputStream in) throws XMLStreamException {
         Map<String, Grammeme> grammemes = new HashMap<>();
-        Parser<?> grammeme = elemAttr("grammeme", "parent")
-            .and(elemText("name"))
-            .and(elemText("alias"))
-            .and(elemText("description"))
-            .nextL(close("grammeme"))
-            .map(r -> grammemes.put(r.val2, new Grammeme(
-                r.val2, r.val3, r.val4, grammemes.get(r.val1)
+        Parser<?> grammeme =
+            within("grammeme", attr("parent"),
+                elemText("name"),
+                elemText("alias"),
+                elemText("description"))
+            .map(r -> grammemes.put(r.$2, new Grammeme(
+                r.$2, r.$3, r.$4, grammemes.get(r.$1)
             )));
-        Parser<Restriction> restriction = elemAttr("restr", "type")
-            .and(elemAttr("left", "type").and(text()))
-            .and(elemAttr("right", "type").and(text()))
-            .nextL(close("restr"))
+        Parser<Restriction> restriction =
+            within("restr", attr("type"),
+                elemAttrAndText("left", "type"),
+                elemAttrAndText("right", "type"))
             .map(r -> new Restriction(
-                Restriction.Type.valueOf(capitalize(r.val1)),
-                Restriction.SideType.valueOf(capitalize(r.val2.val1)),
-                grammemes.get(r.val2.val2),
-                Restriction.SideType.valueOf(capitalize(r.val3.val1)),
-                grammemes.get(r.val3.val2)
+                Restriction.Type.valueOf(capitalize(r.$1)),
+                Restriction.SideType.valueOf(capitalize(r.$2.$1)),
+                grammemes.get(r.$2.$2),
+                Restriction.SideType.valueOf(capitalize(r.$3.$1)),
+                grammemes.get(r.$3.$2)
             ));
-        Function<Tuple2<String, List<String>>, Lexeme.Form> mkForm = t -> new Lexeme.Form(t.val1,
-            (Grammeme[]) t.val2.stream().map(grammemes::get).toArray()
+        Function<Tuple2<String, List<String>>, Lexeme.Form> mkForm = t -> new Lexeme.Form(t.$1,
+            (Grammeme[]) t.$2.stream().map(grammemes::get).toArray()
         );
-        Parser<Lexeme> lexeme = elemAttr("lemma", "id")
-            .and(elemAttr("l", "t")
-                .and(elemAttr("g", "v").nextL(close("g")).until(closing("l"))))
-            .and(elemAttr("f", "t")
-                .and(elemAttr("g", "v").nextL(close("g")).until(closing("f")))
-                .until(closing("lemma")))
+        Parser<Lexeme> lexeme =
+            within("lemma", attr("id"),
+                manyWithin("l", attr("t"), elemAttr("g", "v")),
+                manyWithin("f", attr("t"), elemAttr("g", "v")).until(closing("lemma")))
             .map(r -> new Lexeme(
-                Integer.valueOf(r.val1),
-                mkForm.apply(r.val2),
-                (Lexeme.Form[]) r.val3.stream().map(mkForm).toArray()
+                Integer.valueOf(r.$1),
+                mkForm.apply(r.$2),
+                (Lexeme.Form[]) r.$3.stream().map(mkForm).toArray()
             ));
-        Parser<Link> link = open("link").nextR(attrs()).nextL(close("link")).map(r ->
+        /* Parser<Link> link = open("link").nextR(attrs()).nextL(close("link")).map(r ->
             null
-        );
+        );*/
         return null;
     }
 }
