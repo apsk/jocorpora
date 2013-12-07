@@ -1,15 +1,16 @@
 package com.github.apsk.jocorpora;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class Lexeme {
     public static class Form {
         public final String text;
-        public final Grammeme[] grammemes;
+        public final int grammemeRef;
 
-        public Form(String text, Grammeme[] grammemes) {
+        public Form(String text, int grammemeRef) {
             this.text = text;
-            this.grammemes = grammemes;
+            this.grammemeRef = grammemeRef;
         }
     }
 
@@ -22,6 +23,6 @@ public class Lexeme {
         this.id = id;
         this.lemma = lemma;
         this.forms = forms;
-        this.links = null;
+        this.links = new ArrayList<>();
     }
 }
