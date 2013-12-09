@@ -1,16 +1,18 @@
-package com.github.apsk.jocorpora;
+package com.github.apsk.jocorpora.pool;
+
+import com.github.apsk.jocorpora.Grammeme;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class GrammemeRefPool {
+public final class GrammemesPool {
     static final int CHUNK_SIZE = 2097152;
 
     final ArrayList<byte[]> chunks;
     final ArrayList<Grammeme> grammemes;
     int cursor;
 
-    public GrammemeRefPool(ArrayList<Grammeme> grammemes) {
+    public GrammemesPool(ArrayList<Grammeme> grammemes) {
         this.grammemes = grammemes;
         chunks = new ArrayList<>();
         chunks.add(new byte[CHUNK_SIZE]);
@@ -30,23 +32,15 @@ public class GrammemeRefPool {
         return refPoolId;
     }
 
-    public List<Grammeme> getGrammemes(int ref) {
+    public Grammeme[] getGrammemes(int ref) {
         int index = ref >> 8;
         int count = ref & 255;
-        List<Grammeme> grammemes = new ArrayList<>(count);
+        Grammeme[] grammemes = new Grammeme[count];
         for (int i = 0; i < count; ++i) {
             int chunkIx = (index + i) / CHUNK_SIZE;
             int innerIx = (index + i) % CHUNK_SIZE;
-            grammemes.add(this.grammemes.get(chunks.get(chunkIx)[innerIx]));
+            grammemes[i] = this.grammemes.get(chunks.get(chunkIx)[innerIx]);
         }
         return grammemes;
-    }
-
-    public int getGrammemesCount(int ref) {
-        return ref & 255;
-    }
-
-    public Grammeme getGrammeme(int ref, int index) {
-        return this.grammemes.get((ref >> 8) + index);
     }
 }

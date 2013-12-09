@@ -15,23 +15,25 @@ public final class Entry {
         InputStream in = new FileInputStream("/home/apsk/ling/dict.opcorpora.xml");
         Dictionary dict = Dictionary.fromStream(in);
         System.out.println("Done!");
-        for (int i = 0; i < 10; ++i) {
-            System.out.println("-------------------------------------------------");
-            Lexeme lexeme = dict.lexemes.get(i);
-            Lexeme.Form lemma = lexeme.lemma;
-            System.out.print(lemma.text + ": ");
-            for (Grammeme grammeme : dict.getGrammemes(lemma.grammemeRef)) {
-                System.out.print(grammeme.name + " ");
-            }
+        //for (int i = 0; i < 10; ++i) {
+        System.out.println("-------------------------------------------------");
+        int lexeme = dict.getLexeme(1);
+        long[] forms = dict.getForms(lexeme);
+        int lemma = (int)(forms[0] >> 32);
+        System.out.print(dict.getWord(lemma) + ": ");
+        for (Grammeme grammeme : dict.getGrammemes((int)forms[0])) {
+            System.out.print(grammeme.name + " ");
+        }
+            /*
             System.out.println();
             for (Lexeme.Form form : lexeme.forms) {
-                System.out.print("form " + form.text + ": ");
-                for (Grammeme grammeme : dict.getGrammemes(form.grammemeRef)) {
+                System.out.print("form " + dict.getWord(form.wordRef) + ": ");
+                for (Grammeme grammeme : dict.getGrammemes(form.grammemesRef)) {
                     System.out.print(grammeme.name + " ");
                 }
                 System.out.println();
-            }
-        }
+            }*/
+        //}
         System.out.println("Time elapsed: " + (System.currentTimeMillis() - startTime) / 1000);
         for (;;) {
             if (s.nextLine().equals(":q")) {

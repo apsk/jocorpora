@@ -1,6 +1,10 @@
 package com.github.apsk.jocorpora;
 import com.github.apsk.hax.Parser;
 import com.github.apsk.j8t.Tuple2;
+import com.github.apsk.jocorpora.pool.FormsPool;
+import com.github.apsk.jocorpora.pool.GrammemesPool;
+import com.github.apsk.jocorpora.pool.LexemePool;
+import com.github.apsk.jocorpora.pool.WordPool;
 
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
@@ -20,40 +24,60 @@ public class Dictionary {
     final String revision;
     final ArrayList<Grammeme> grammemes;
     final Map<String, Grammeme> grammemeMap;
-    final GrammemeRefPool grammemeRefPool;
+    final GrammemesPool grammemesPool;
+    final WordPool wordPool;
+    final FormsPool formsPool;
+    final LexemePool lexemePool;
     final List<Restriction> restrictions;
-    final ArrayList<Lexeme> lexemes;
 
     private Dictionary(
         String version,
         String revision,
         ArrayList<Grammeme> grammemes,
         Map<String, Grammeme> grammemeMap,
-        GrammemeRefPool grammemeRefPool,
-        List<Restriction> restrictions,
-        ArrayList<Lexeme> lexemes
+        GrammemesPool grammemesPool,
+        WordPool wordPool,
+        FormsPool formsPool,
+        LexemePool lexemePool,
+        List<Restriction> restrictions
     ) {
         this.version = version;
         this.revision = revision;
         this.grammemes = grammemes;
         this.grammemeMap = grammemeMap;
-        this.grammemeRefPool = grammemeRefPool;
+        this.grammemesPool = grammemesPool;
+        this.wordPool = wordPool;
+        this.formsPool = formsPool;
+        this.lexemePool = lexemePool;
         this.restrictions = restrictions;
-        this.lexemes = lexemes;
     }
 
-    public List<Grammeme> getGrammemes(int ref) {
-        return grammemeRefPool.getGrammemes(ref);
+    public Grammeme[] getGrammemes(int ref) {
+        return grammemesPool.getGrammemes(ref);
+    }
+
+    public String getWord(int ref) {
+        return wordPool.getWord(ref);
+    }
+
+    public int getLexeme(int id) {
+        return lexemePool.getLexeme(id);
+    }
+
+    public long[] getForms(int ref) {
+        return formsPool.getForms(ref);
     }
 
     public static Dictionary fromStream(InputStream inputStream) throws XMLStreamException {
         byte[] grammemesCount = new byte[1];
+        grammemesCount[0] = 0;
+
         ArrayList<Grammeme> grammemes = new ArrayList<>();
         Map<String, Grammeme> grammemeMap = new HashMap<>();
-        ArrayList<Lexeme> lexemes = new ArrayList<>(400000);
-        GrammemeRefPool grammemeRefPool = new GrammemeRefPool(grammemes);
-
-        grammemesCount[0] = 0;
+        GrammemesPool grammemesPool = new GrammemesPool(grammemes);
+        WordPool wordPool = new WordPool();
+        FormsPool formsPool = new FormsPool();
+        LexemePool lexemePool = new LexemePool();
 
         Parser<Tuple2<String,String>> attributesParser =
             open("dictionary", seq(attr("version"), attr("revision")));
@@ -81,37 +105,43 @@ public class Dictionary {
                 Restriction.SideType.valueOf(capitalize(r.$3.$1)),
                 grammemeMap.get(r.$3.$2)));
 
-        ArrayList<Grammeme> formGrammemePool = new ArrayList<>(32);
-
-        Function<Tuple2<String, List<String>>, Lexeme.Form> mkForm = t -> {
-            formGrammemePool.clear();
-            for (String grammemeText : t.$2)
-                formGrammemePool.add(grammemeMap.get(grammemeText));
-            return new Lexeme.Form(t.$1, grammemeRefPool.addGrammemes(formGrammemePool));
-        };
+        ArrayList<Grammeme> formGrammemesPool = new ArrayList<>(32);
+        int[] lexemeFormsPool = new int[128]; // each form is 2 ints: formRef x grammemesRef
 
         Parser<?> lexemeParser =
             within("lemma", attr("id"),
                 manyWithin("l", attr("t"), elemAttr("g", "v")),
                 manyWithin("f", attr("t"), elemAttr("g", "v")).until(closing("lemma")))
             .effect(r -> {
-                int id = Integer.valueOf(r.$1);
-                lexemes.add(new Lexeme(id, mkForm.apply(r.$2),
-                    r.$3.stream().map(mkForm).toArray(Lexeme.Form[]::new)));
+                formGrammemesPool.clear();
+                for (String grammemeText : r.$2.$2)
+                    formGrammemesPool.add(grammemeMap.get(grammemeText));
+                lexemeFormsPool[0] = wordPool.addWord(r.$2.$1);
+                lexemeFormsPool[1] = grammemesPool.addGrammemes(formGrammemesPool);
+                int ix = 2;
+                for (Tuple2<String,List<String>> form : r.$3) {
+                    formGrammemesPool.clear();
+                    for (String grammemeText : form.$2)
+                        formGrammemesPool.add(grammemeMap.get(grammemeText));
+                    lexemeFormsPool[ix] = wordPool.addWord(form.$1);
+                    lexemeFormsPool[ix+1] = grammemesPool.addGrammemes(formGrammemesPool);
+                    ix += 2;
+                }
+                lexemePool.putLexeme(Integer.valueOf(r.$1),
+                    formsPool.addForms(lexemeFormsPool, ix));
             });
 
+        /*
         Parser<?> linkParser =
             elem("link",
                 seq(attr("id"), attr("from"), attr("to"), attr("type")))
             .effect(r -> {
-                System.out.println("r.$2     = " + r.$2);
-                System.out.println("pI(r.$2) = " + Integer.parseInt(r.$2));
-                System.out.println(" ...     = " + lexemes.get(Integer.parseInt(r.$2)));
                 lexemes.get(Integer.parseInt(r.$2))
                     .links.add(new Link(
                         Link.Type.fromId(Integer.parseInt(r.$4)),
                         lexemes.get(Integer.parseInt(r.$3))));
             });
+        */
 
         XMLStreamReader reader = XMLInputFactory.newInstance().createXMLStreamReader(inputStream);
         skipTo("dictionary").run(reader);
@@ -122,14 +152,15 @@ public class Dictionary {
         List<Restriction> restrictions = manyWithin("restrictions", restrictionParser).run(reader);
         System.out.println(restrictions.size() + " restrictions read.");
         evalManyWithin("lemmata", lexemeParser).run(reader);
-        System.out.println(lexemes.size() + " lexemes read.");
+        // System.out.println(lexemePool.size() + " lexemes read.");
         skipTo("links").run(reader);
         // evalManyWithin("links", link).run(reader);
 
         return new Dictionary(
             verRev.$1, verRev.$2,
-            grammemes, grammemeMap, grammemeRefPool,
-            restrictions, lexemes
+            grammemes, grammemeMap, grammemesPool,
+            wordPool, formsPool, lexemePool,
+            restrictions
         );
     }
 }
